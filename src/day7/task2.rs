@@ -6,7 +6,8 @@ enum Node {
     F(u32, String)
 }
 
-const RESULT_MAX_SIZE: u32 = 100_000;
+const DISK_SIZE: u32 = 70_000_000;
+const SPACE_REQUIRED: u32 = 30_000_000;
 
 pub fn run() {
     let lines = stdin().lines()
@@ -50,7 +51,7 @@ pub fn run() {
         }
     }
 
-    println!("{:?}", get_result(&tree));
+    println!("{:?}", get_result(&tree).unwrap());
 }
 
 fn list_directory<'a, I: Iterator<Item = &'a String>>(
@@ -76,7 +77,11 @@ fn list_directory<'a, I: Iterator<Item = &'a String>>(
     listing
 }
 
-fn get_result(tree: &HashMap<String, Node>) -> u32 {
+fn get_result(tree: &HashMap<String, Node>) -> Option<u32> {
+    let disk_usage = calculate_size(&"/".to_string(), &tree);
+    let disk_remaining = DISK_SIZE - disk_usage;
+    let to_free = SPACE_REQUIRED - disk_remaining;
+
     tree.iter()
         .filter(|(key, _)| {
             match tree.get(*key).unwrap() {
@@ -84,8 +89,8 @@ fn get_result(tree: &HashMap<String, Node>) -> u32 {
                 Node::F(_, _) => false,
             }
         }).map(|(key, _)| calculate_size(key, tree))
-        .filter(|size| *size <= RESULT_MAX_SIZE)
-        .sum::<u32>()
+        .filter(|s| *s >= to_free)
+        .reduce(|accum, item| std::cmp::min(accum, item))
 }
 
 fn calculate_size(node: &String, tree: &HashMap<String, Node>) -> u32 {

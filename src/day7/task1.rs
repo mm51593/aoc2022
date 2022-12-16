@@ -3,8 +3,10 @@ use std::{collections::HashMap, io::stdin, iter::Peekable};
 #[derive(Debug)]
 enum Node {
     D(Vec<String>, Option<String>),
-    F(i32, String)
+    F(u32, String)
 }
+
+const RESULT_MAX_SIZE: u32 = 100_000;
 
 pub fn run() {
     let lines = stdin().lines()
@@ -13,7 +15,7 @@ pub fn run() {
     let mut tree = HashMap::new();
 
     let mut pwd = "/".to_string();
-    tree.insert("//".to_string(), Node::D(Vec::new(), None));
+    tree.insert("/".to_string(), Node::D(Vec::new(), None));
 
     let mut iter = lines.iter().peekable();
     while let Some(cmd) = iter.next() {
@@ -26,15 +28,17 @@ pub fn run() {
                         Node::D(_, p) => p.as_ref().unwrap().to_string(),
                         Node::F(_, p) => p.to_string(),
                     },
+                    "/" => "/".to_string(),
                     d => {
-                        let mut name = String::from(d);
+                        let mut name = String::from(pwd);
                         name.push('/');
-                        name.push_str(cmd_split[2]);
+                        name.push_str(d);
                         name
                     },
                 }; ()
             }
             "ls" => {
+                println!("{}", pwd);
                 match tree.remove(&pwd).unwrap() {
                     Node::D(_, p) => {
                         let new_node = Node::D(list_directory(&mut tree, &mut iter, &pwd), p.to_owned());
@@ -48,7 +52,7 @@ pub fn run() {
         }
     }
 
-    println!("{:?}", tree);
+    println!("{:?}", get_result(&tree));
 }
 
 fn list_directory<'a, I: Iterator<Item = &'a String>>(
@@ -63,6 +67,7 @@ fn list_directory<'a, I: Iterator<Item = &'a String>>(
         let mut name = String::from(parent);
         name.push('/');
         name.push_str(line_split[1]);
+        println!("{}", name);
         listing.push(name.to_owned());
         match line_split[0] {
             "dir" => tree.insert(name, Node::D(Vec::new(), Some(parent.to_owned()))),
@@ -72,4 +77,23 @@ fn list_directory<'a, I: Iterator<Item = &'a String>>(
         iter.next();
     }
     listing
+}
+
+fn get_result(tree: &HashMap<String, Node>) -> u32 {
+    tree.iter()
+        .filter(|(key, _)| {
+            match tree.get(*key).unwrap() {
+                Node::D(_, _) => true,
+                Node::F(_, _) => false,
+            }
+        }).map(|(key, _)| calculate_size(key, tree))
+        .filter(|size| *size <= RESULT_MAX_SIZE)
+        .sum::<u32>()
+}
+
+fn calculate_size(node: &String, tree: &HashMap<String, Node>) -> u32 {
+    match tree.get(node).unwrap() {
+        Node::D(c, _) => c.iter().map(|n| calculate_size(n, tree)).sum(),
+        Node::F(s, _) => *s
+    }
 }

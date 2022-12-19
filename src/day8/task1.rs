@@ -49,8 +49,6 @@ fn count_visible(chart: &mut Vec<Vec<Cell>>) -> i32 {
 
     let width = chart[0].len();
 
-    println!("{} {}", width, chart.len());
-
     // up - down
     for i in 0..width {
         let mut highest = 0;

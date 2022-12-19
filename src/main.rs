@@ -8,5 +8,5 @@ mod day7;*/
 mod day8;
 
 fn main() {
-    day8::task1::run();
+    day8::task2::run();
 }

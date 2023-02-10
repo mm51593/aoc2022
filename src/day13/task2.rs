@@ -83,34 +83,16 @@ fn get_next(array: &[u8], index: &mut usize) -> u8 {
 }
 
 fn compare_packages(left: &PackageElem, right: &PackageElem) ->  Ordering {
-    if let PackageElem::PInt(l) = left {
-        if let PackageElem::PInt(r) = right {
-            match l - r {
-                i if i < 0 => Ordering::Less,
-                i if i == 0 => Ordering::Equal,
-                _ => Ordering::Greater,
-            }
-        }
-        else if let PackageElem::PList(_) = right {
-            compare_packages(&PackageElem::PList(vec![PackageElem::PInt(*l)]), right)
-        }
-        else {
-            panic!()
-        }
-    }
-    else if let PackageElem::PList(l) = left {
-        if let PackageElem::PInt(r) = right {
-            compare_packages(left, &PackageElem::PList(vec![PackageElem::PInt(*r)]))
-        }
-        else if let PackageElem::PList(r) = right {
+    match (left, right) {
+        (PackageElem::PList(l), PackageElem::PList(r)) => {
             for i in 0..l.len() {
                 if i >= r.len() {
                     return Ordering::Greater;
                 }
                 match compare_packages(l.get(i).unwrap(), r.get(i).unwrap()) {
+                    Ordering::Equal => (),
                     Ordering::Greater => return Ordering::Greater,
                     Ordering::Less => return Ordering::Less,
-                    Ordering::Equal => (),
                 }
             }
             if l.len() == r.len() {
@@ -119,12 +101,15 @@ fn compare_packages(left: &PackageElem, right: &PackageElem) ->  Ordering {
             else {
                 Ordering::Less
             }
-        }
-        else {
-            panic!()
-        }
-    }
-    else {
-        panic!()
+        },
+        (PackageElem::PList(_), PackageElem::PInt(r)) =>  compare_packages(left, &PackageElem::PList(vec![PackageElem::PInt(*r)])),
+        (PackageElem::PInt(l), PackageElem::PList(_)) => compare_packages(&PackageElem::PList(vec![PackageElem::PInt(*l)]), right),
+        (PackageElem::PInt(l), PackageElem::PInt(r)) => {
+            match l - r {
+                i if i < 0 => Ordering::Less,
+                i if i == 0 => Ordering::Equal,
+                _ => Ordering::Greater,
+            }
+        },
     }
 }

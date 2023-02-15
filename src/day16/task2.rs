@@ -4,7 +4,7 @@ use lazy_static::lazy_static;
 
 const TRAVEL_TIME: u32 = 1;
 const OPENING_TIME: u32 = 1;
-const TOTAL_TIME: u32 = 30;
+const TOTAL_TIME: u32 = 26;
 const STARTING_NODE: &str = "AA";
 
 #[derive(Debug)]
@@ -17,8 +17,6 @@ pub fn run() {
     let (nodes, active_nodes, start) = get_input();
 
     let distances = floyd_warshall(&nodes);
-
-    //let res = find_best(&mut active_nodes, *nodes, &distances, start);
     
     let res = dfs(&active_nodes, &distances, &nodes, start);
     println!("{res}");
@@ -111,8 +109,6 @@ fn dfs(active_nodes: &[usize], distances: &[Vec<u32>], nodes: &HashMap<usize, No
     working_order.sort_unstable_by(|n1, n2| heuristic(*n1, *n2, start, distances, nodes));
     let mut visited = (0..working_order.len()).map(|_| false).collect::<Vec<_>>();
 
-    let total_rate = nodes.iter().map(|f| f.1.rate).reduce(|acc, elem| acc + elem).unwrap();
-
     fn dfs_step(
             working_order: &Vec<usize>,
             distances: &[Vec<u32>],
@@ -139,22 +135,47 @@ fn dfs(active_nodes: &[usize], distances: &[Vec<u32>], nodes: &HashMap<usize, No
                 };
                 let rate = nodes.get(&current_node).unwrap().rate * new_time;
 
-                // prune
-                let new_rate = rate_remaining - nodes.get(&current_node).unwrap().rate;
-                if (sum + rate) + (time_remaining - OPENING_TIME - TRAVEL_TIME) * rate_remaining < *best_so_far {
-                    visited[i] = false;
-                    continue;
-                }
+                 // prune
+                 let new_rate = rate_remaining - nodes.get(&current_node).unwrap().rate;
+                 if (sum + rate) + (time_remaining - OPENING_TIME - TRAVEL_TIME) * rate_remaining < *best_so_far {
+                     visited[i] = false;
+                     continue;
+                 } 
 
                 best  = u32::max(best, dfs_step(working_order, distances, nodes, current_node, visited, new_time, sum + rate, best_so_far, new_rate));
                 visited[i] = false;
             }
         }
         
-        let ret = u32::max(best, sum);
-        if ret > *best_so_far { *best_so_far = ret; }
-        ret
+        u32::max(best, sum)
     }
 
-    dfs_step(&working_order, distances, nodes, start, &mut visited, TOTAL_TIME, 0, &mut 0, total_rate)
+    let mut best = 0;
+    for (v1, v2) in combination_iterator(&working_order) {
+        let v1_total_rate = v1.iter().map(|x| nodes.get(x).unwrap().rate).reduce(|acc, elem| acc + elem).unwrap_or(0);
+        let v1_res = dfs_step(&v1, distances, nodes, start, &mut visited, TOTAL_TIME, 0, &mut 0, v1_total_rate);
+
+        let v2_total_rate = v2.iter().map(|x| nodes.get(x).unwrap().rate).reduce(|acc, elem| acc + elem).unwrap_or(0);
+        let v2_res = dfs_step(&v2, distances, nodes, start, &mut visited, TOTAL_TIME, 0, &mut 0, v2_total_rate);
+
+        best = u32::max(best, v1_res + v2_res);
+    }
+
+    best
+}
+
+fn combination_iterator<'a>(active_nodes: &'a [usize]) -> Box<dyn Iterator<Item = (Vec<usize>, Vec<usize>)> + 'a> {
+    Box::new((0..2_u32.pow(active_nodes.len() as u32 - 1))
+        .map(|f| {
+            let first = (0..active_nodes.len()).rev()
+                .filter(|i| f & (1 << i) == 0)
+                .map(|i| active_nodes[i])
+                .collect::<Vec<_>>();
+            let second = (0..active_nodes.len()).rev()
+                .filter(|i| f & (1 << i) != 0)
+                .map(|i| active_nodes[i])
+                .collect::<Vec<_>>();
+            (first, second)
+        })
+    )
 }

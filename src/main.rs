@@ -14,5 +14,5 @@ mod day14;*/
 mod day16;
 
 fn main() {
-    day16::task1::run();
+    day16::task2::run();
 }

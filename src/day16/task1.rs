@@ -1,10 +1,12 @@
 use std::{io::stdin, collections::HashMap, cmp::Ordering};
-use itertools::{Permutations, Itertools};
+use itertools::{Itertools};
 use regex::Regex;
 use lazy_static::lazy_static;
 
 const TRAVEL_TIME: u32 = 1;
 const OPENING_TIME: u32 = 1;
+const TOTAL_TIME: u32 = 30;
+const STARTING_NODE: &str = "AA";
 
 #[derive(Debug)]
 struct Node {
@@ -13,12 +15,14 @@ struct Node {
 }
 
 pub fn run() {
-    let (nodes, mut active_nodes, start) = get_input();
+    let (nodes, active_nodes, start) = get_input();
 
     let distances = floyd_warshall(&nodes);
 
-    active_nodes.sort_unstable_by(|n1, n2| heuristic(*n1, *n2, start, &distances, &nodes));
-    permutate(active_nodes);
+    //let res = find_best(&mut active_nodes, *nodes, &distances, start);
+    
+    let res = dfs(&active_nodes, &distances, &nodes, start);
+    println!("{res}");
 }
 
 fn get_input() -> (Box<HashMap<usize, Node>>, Vec<usize>, usize) {
@@ -43,7 +47,7 @@ fn get_input() -> (Box<HashMap<usize, Node>>, Vec<usize>, usize) {
                     count - 1
                 },
             };
-            if cap[1].to_owned() == "AA" { start = Some(index)}
+            if cap[1].to_owned() == STARTING_NODE { start = Some(index)}
             nodes.insert(index, Node { rate: cap[2].parse::<u32>().unwrap(), 
                 adjacent: cap[3].split(", ").map(|f| {
                     if lut.get(f).is_none() {
@@ -59,36 +63,37 @@ fn get_input() -> (Box<HashMap<usize, Node>>, Vec<usize>, usize) {
 }
 
 fn floyd_warshall(nodes: &Box<HashMap<usize, Node>>) -> Vec<Vec<u32>> {
-    let mut grid = floyd_warshall_setup(&nodes);
-    floyd_warshall_calc(&mut grid);
-    grid
-}
-fn floyd_warshall_setup(nodes: &HashMap<usize, Node>) -> Vec<Vec<u32>> {
-    let mut grid = (0..nodes.len())
-        .map(|_| (0..nodes.len())
-            .map(|_| u32::MAX).collect::<Vec<_>>()
-        )
-        .collect::<Vec<_>>();
-    
-    for (index, elem) in nodes.iter() {
-        for neighbour in elem.adjacent.iter() {
-            grid[*index][*neighbour] = TRAVEL_TIME;
+    fn floyd_warshall_setup(nodes: &HashMap<usize, Node>) -> Vec<Vec<u32>> {
+        let mut grid = (0..nodes.len())
+            .map(|_| (0..nodes.len())
+                .map(|_| u32::MAX).collect::<Vec<_>>()
+            )
+            .collect::<Vec<_>>();
+        
+        for (index, elem) in nodes.iter() {
+            for neighbour in elem.adjacent.iter() {
+                grid[*index][*neighbour] = TRAVEL_TIME;
+            }
         }
+        grid
     }
-    grid
-}
-
-fn floyd_warshall_calc(grid: &mut Vec<Vec<u32>>) {
-    for k in 0..grid.len() {                // outer
-        for i in 0..grid.len() {            // inner
-            if i == k { continue; }
-            for j in 0..grid.len() {        // iterator
-                if j == k { continue; }
-                grid[i][j] = u32::min(grid[i][j], 
-                    grid[i][k].checked_add(grid[k][j]).map_or(u32::MAX, |x| x));
+    
+    fn floyd_warshall_calc(grid: &mut Vec<Vec<u32>>) {
+        for k in 0..grid.len() {                // outer
+            for i in 0..grid.len() {            // inner
+                if i == k { continue; }
+                for j in 0..grid.len() {        // iterator
+                    if j == k { continue; }
+                    grid[i][j] = u32::min(grid[i][j], 
+                        grid[i][k].checked_add(grid[k][j]).map_or(u32::MAX, |x| x));
+                }
             }
         }
     }
+    
+    let mut grid = floyd_warshall_setup(&nodes);
+    floyd_warshall_calc(&mut grid);
+    grid
 }
 
 fn heuristic(n1: usize, n2: usize, start: usize, distances: &Vec<Vec<u32>>, nodes: &HashMap<usize, Node>) -> Ordering {
@@ -101,6 +106,45 @@ fn heuristic(n1: usize, n2: usize, start: usize, distances: &Vec<Vec<u32>>, node
     node2_rank.cmp(&node1_rank)
 }
 
-fn permutate(starting_point: Vec<usize>) {
-    starting_point.iter().permutations(starting_point.len()).for_each(|f| println!("{f:?}"));
+fn dfs(active_nodes: &Vec<usize>, distances: &Vec<Vec<u32>>, nodes: &HashMap<usize, Node>, start: usize) -> u32 {
+    // prepare nodes
+    let mut working_order = active_nodes.clone();
+    working_order.sort_unstable_by(|n1, n2| heuristic(*n1, *n2, start, &distances, &nodes));
+    let mut visited = (0..working_order.len()).map(|_| false).collect::<Vec<_>>();
+
+    let total_rate = nodes.iter().map(|f| f.1.rate).reduce(|acc, elem| acc + elem).unwrap();
+
+    fn dfs_step(
+            working_order: &Vec<usize>,
+            distances: &Vec<Vec<u32>>,
+            nodes: &HashMap<usize, Node>,
+            previous_node: usize,
+            visited: &mut Vec<bool>,
+            time_remaining: u32,
+            sum: u32) -> u32 {
+        let mut best = 0;
+        for i in 0..working_order.len() {
+            if !visited[i] {
+                visited[i] = true;
+
+                let current_node = working_order[i];
+                let dist = distances[previous_node][current_node];
+                let new_time = match time_remaining.checked_sub(dist + OPENING_TIME) {
+                    Some(x) => x,
+                    None => {
+                        visited[i] = false;
+                        continue
+                    }
+                };
+                let rate = nodes.get(&current_node).unwrap().rate * new_time;
+
+                best  = u32::max(best, dfs_step(working_order, distances, nodes, current_node, visited, new_time, sum + rate));
+                visited[i] = false;
+            }
+        }
+        
+        u32::max(best, sum)
+    }
+
+    dfs_step(&working_order, distances, nodes, start, &mut visited, TOTAL_TIME, 0)
 }

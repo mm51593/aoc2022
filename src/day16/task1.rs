@@ -1,5 +1,4 @@
 use std::{io::stdin, collections::HashMap, cmp::Ordering};
-use itertools::{Itertools};
 use regex::Regex;
 use lazy_static::lazy_static;
 
@@ -25,8 +24,8 @@ pub fn run() {
     println!("{res}");
 }
 
-fn get_input() -> (Box<HashMap<usize, Node>>, Vec<usize>, usize) {
-    let mut nodes = Box::new(HashMap::new());
+fn get_input() -> (HashMap<usize, Node>, Vec<usize>, usize) {
+    let mut nodes = HashMap::new();
     let mut active_nodes = Vec::new();
     let mut lut = HashMap::new();
 
@@ -62,7 +61,7 @@ fn get_input() -> (Box<HashMap<usize, Node>>, Vec<usize>, usize) {
     (nodes, active_nodes, start.unwrap())
 }
 
-fn floyd_warshall(nodes: &Box<HashMap<usize, Node>>) -> Vec<Vec<u32>> {
+fn floyd_warshall(nodes: &HashMap<usize, Node>) -> Vec<Vec<u32>> {
     fn floyd_warshall_setup(nodes: &HashMap<usize, Node>) -> Vec<Vec<u32>> {
         let mut grid = (0..nodes.len())
             .map(|_| (0..nodes.len())
@@ -96,7 +95,7 @@ fn floyd_warshall(nodes: &Box<HashMap<usize, Node>>) -> Vec<Vec<u32>> {
     grid
 }
 
-fn heuristic(n1: usize, n2: usize, start: usize, distances: &Vec<Vec<u32>>, nodes: &HashMap<usize, Node>) -> Ordering {
+fn heuristic(n1: usize, n2: usize, start: usize, distances: &[Vec<u32>], nodes: &HashMap<usize, Node>) -> Ordering {
     let node1 = nodes.get(&n1).unwrap();
     let node2 = nodes.get(&n2).unwrap();
 
@@ -106,22 +105,24 @@ fn heuristic(n1: usize, n2: usize, start: usize, distances: &Vec<Vec<u32>>, node
     node2_rank.cmp(&node1_rank)
 }
 
-fn dfs(active_nodes: &Vec<usize>, distances: &Vec<Vec<u32>>, nodes: &HashMap<usize, Node>, start: usize) -> u32 {
+fn dfs(active_nodes: &[usize], distances: &[Vec<u32>], nodes: &HashMap<usize, Node>, start: usize) -> u32 {
     // prepare nodes
-    let mut working_order = active_nodes.clone();
-    working_order.sort_unstable_by(|n1, n2| heuristic(*n1, *n2, start, &distances, &nodes));
+    let mut working_order = active_nodes.to_owned();
+    working_order.sort_unstable_by(|n1, n2| heuristic(*n1, *n2, start, distances, nodes));
     let mut visited = (0..working_order.len()).map(|_| false).collect::<Vec<_>>();
 
     let total_rate = nodes.iter().map(|f| f.1.rate).reduce(|acc, elem| acc + elem).unwrap();
 
     fn dfs_step(
             working_order: &Vec<usize>,
-            distances: &Vec<Vec<u32>>,
+            distances: &[Vec<u32>],
             nodes: &HashMap<usize, Node>,
             previous_node: usize,
             visited: &mut Vec<bool>,
             time_remaining: u32,
-            sum: u32) -> u32 {
+            sum: u32,
+            best_so_far: &mut u32,
+            rate_remaining: u32) -> u32 {
         let mut best = 0;
         for i in 0..working_order.len() {
             if !visited[i] {
@@ -138,13 +139,22 @@ fn dfs(active_nodes: &Vec<usize>, distances: &Vec<Vec<u32>>, nodes: &HashMap<usi
                 };
                 let rate = nodes.get(&current_node).unwrap().rate * new_time;
 
-                best  = u32::max(best, dfs_step(working_order, distances, nodes, current_node, visited, new_time, sum + rate));
+                // prune
+                let new_rate = rate_remaining - nodes.get(&current_node).unwrap().rate;
+                if (sum + rate) + (time_remaining - OPENING_TIME - TRAVEL_TIME) * rate_remaining < *best_so_far {
+                    visited[i] = false;
+                    continue;
+                }
+
+                best  = u32::max(best, dfs_step(working_order, distances, nodes, current_node, visited, new_time, sum + rate, best_so_far, new_rate));
                 visited[i] = false;
             }
         }
         
-        u32::max(best, sum)
+        let ret = u32::max(best, sum);
+        if ret > *best_so_far { *best_so_far = ret; }
+        ret
     }
 
-    dfs_step(&working_order, distances, nodes, start, &mut visited, TOTAL_TIME, 0)
+    dfs_step(&working_order, distances, nodes, start, &mut visited, TOTAL_TIME, 0, &mut 0, total_rate)
 }
